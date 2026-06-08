@@ -34,6 +34,86 @@ cmake = "latest"
 
 # ─── Setup & Build ──────────────────────────────────────
 
+# Install host build prerequisites that mise can't manage. mise gives us cmake
+# and (via rustup) the Rust toolchain; this covers the rest:
+#   - Linux:   Bevy default-feature dev libs (alsa/udev/wayland) + a C/C++
+#              toolchain + pkg-config (for manifold-csg-sys, built by cmake)
+#   - macOS:   Xcode Command Line Tools (clang) — cmake comes from mise
+#   - Windows: MSVC Build Tools (C++ for manifold-csg-sys + -sys crates)
+# OS-dispatching + idempotent: skips fast (no sudo) when already satisfied, so
+# it's cheap to depend on from the build tasks.
+[tasks.setup-deps]
+description = "Install host build prerequisites (Bevy sys deps + C/C++ toolchain). OS-dispatching; idempotent."
+run = '''
+#!/usr/bin/env nu
+def main [] {
+  match $nu.os-info.name {
+    "linux"   => { linux-deps }
+    "macos"   => { macos-deps }
+    "windows" => { windows-deps }
+    _ => { print -e $"✗ unsupported OS: ($nu.os-info.name)"; exit 1 }
+  }
+}
+
+def pc-has [name: string] {
+  (do { ^pkg-config --exists $name } | complete).exit_code == 0
+}
+
+def linux-deps [] {
+  if (
+    (which pkg-config | is-not-empty)
+    and (pc-has "alsa") and (pc-has "libudev") and (pc-has "wayland-client")
+    and (which cc | is-not-empty)
+  ) {
+    print "✓ linux build prerequisites already satisfied"
+    return
+  }
+  if (which apt-get | is-not-empty) {
+    print "→ apt: libasound2-dev libudev-dev libwayland-dev build-essential pkg-config"
+    ^sudo apt-get update
+    ^sudo apt-get install --no-install-recommends -y libasound2-dev libudev-dev libwayland-dev build-essential pkg-config
+  } else if (which dnf | is-not-empty) {
+    print "→ dnf: alsa-lib-devel systemd-devel wayland-devel gcc-c++ pkgconf-pkg-config"
+    ^sudo dnf install -y alsa-lib-devel systemd-devel wayland-devel gcc-c++ pkgconf-pkg-config
+  } else if (which pacman | is-not-empty) {
+    print "→ pacman: alsa-lib systemd libwayland base-devel pkgconf"
+    ^sudo pacman -S --needed --noconfirm alsa-lib systemd libwayland base-devel pkgconf
+  } else {
+    print -e "✗ no supported package manager (apt-get/dnf/pacman)."
+    print -e "  Install manually: alsa, udev/systemd, wayland dev headers + a C/C++ toolchain + pkg-config."
+    exit 1
+  }
+  print "✓ linux build prerequisites installed"
+}
+
+def macos-deps [] {
+  if (do { ^xcode-select -p } | complete).exit_code == 0 {
+    print "✓ Xcode Command Line Tools present (clang available)"
+  } else {
+    print "→ installing Xcode Command Line Tools (a GUI dialog may appear)…"
+    ^xcode-select --install
+    print -e "  complete the dialog, then re-run `mise run setup-deps`"
+    exit 1
+  }
+}
+
+def windows-deps [] {
+  if (which cl | is-not-empty) {
+    print "✓ MSVC compiler (cl.exe) already on PATH"
+    return
+  }
+  if (which winget | is-not-empty) {
+    print "→ winget: Microsoft.VisualStudio.2022.BuildTools (+ C++ workload)"
+    ^winget install --id Microsoft.VisualStudio.2022.BuildTools --accept-source-agreements --accept-package-agreements --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+    print -e "  open a 'Developer Command Prompt for VS' (or restart the shell) so cl.exe is on PATH, then `mise run build`"
+  } else {
+    print -e "✗ winget not found. Install MSVC Build Tools manually:"
+    print -e "  https://visualstudio.microsoft.com/downloads/ → 'Build Tools for Visual Studio' → 'Desktop development with C++'"
+    exit 1
+  }
+}
+'''
+
 [tasks.setup]
 description = "First-time setup: build editor + SDK dylib + rustc wrapper"
 depends = ["build-dylib", "build-rustc-wrapper"]
@@ -44,18 +124,22 @@ echo "Setup complete! Run 'mise run open' to launch the editor."
 
 [tasks.build]
 description = "Build the editor (without dylib/extension support)"
+depends = ["setup-deps"]
 run = "cargo build"
 
 [tasks.build-dylib]
 description = "Build the editor with dylib/extension-loading support"
+depends = ["setup-deps"]
 run = "cargo build --features dylib"
 
 [tasks.build-rustc-wrapper]
 description = "Build the rustc wrapper"
+depends = ["setup-deps"]
 run = "cargo build -p jackdaw_rustc_wrapper"
 
 [tasks.build-release]
 description = "Build in release mode (no dev extensions)"
+depends = ["setup-deps"]
 run = "cargo build --release --no-default-features"
 
 # ─── Run ────────────────────────────────────────────────

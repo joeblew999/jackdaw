@@ -53,9 +53,17 @@ from the single biggest risk: the scene format is the unfinished, churning part 
 
 ## Build prerequisites (this fork) ✅
 
+mise + rustup are not self-contained — the build also needs host system deps mise
+can't manage. `mise run setup-deps` (OS-dispatching, idempotent) installs them, and
+the build tasks depend on it, so `mise run build` is self-sufficient on each desktop.
+
 - **nightly toolchain** — pinned in `rust-toolchain.toml` (`nightly-2026-03-05`, `try_trait_v2`). Owned by rustup, not mise.
-- **cmake** — `manifold-csg-sys` (the Manifold CSG kernel) build script needs it. Declared in our `mise.toml [tools]`.
-- `mise run build` → 334 MB debug binary in ~8.5 min from cold.
+- **cmake** — `manifold-csg-sys` (the Manifold CSG kernel) build script needs it. Declared in `mise.toml [tools]`.
+- **host system deps** (via `setup-deps`):
+  - Linux: `libasound2-dev libudev-dev libwayland-dev` (Bevy default features) + `build-essential` + `pkg-config`
+  - macOS: Xcode Command Line Tools (clang)
+  - Windows: MSVC Build Tools (C++)
+- `mise run build` → 334 MB debug binary in ~8.5 min from cold (macOS, verified).
 
 ## Roadmap (phases)
 
