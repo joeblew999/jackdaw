@@ -21,6 +21,11 @@
 # in nushell (`#!/usr/bin/env nu`) so they run identically on Linux/macOS/
 # Windows. Plain single-command tasks (`cargo …`) stay as-is. Avoid sh-isms
 # (cat/find/cp/rm/$VAR/&&//tmp) — use nushell built-ins instead.
+#
+# SELF-CONTAINED BUILD: `mise run build` depends on `setup-deps`, which installs
+# the host system deps mise can't (Bevy alsa/udev/wayland + a C/C++ toolchain),
+# dispatched per OS. So `mise run build` works from scratch on any desktop —
+# which is exactly what the .github/workflows/mise-desktop-build.yaml CI relies on.
 
 # ─── Tools ──────────────────────────────────────────────
 

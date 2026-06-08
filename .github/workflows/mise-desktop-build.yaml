@@ -1,16 +1,12 @@
-# Desktop build (our overlay branch only).
+# Desktop build (our overlay branch only) — builds Jackdaw on each desktop OS.
 #
-# Builds Jackdaw on each desktop OS using mise for tooling. This is OUR
-# workflow (joeblew999 branch) — separate from upstream's ci.yaml.
+# Fully mise-driven now that the tasks are cross-platform: `mise run build`
+# pulls in `setup-deps` (host deps per OS: Linux apt / macOS Xcode CLT /
+# Windows MSVC) and cmake, then runs cargo build. Rust nightly resolves from
+# rust-toolchain.toml via rustup. No per-OS steps needed in the workflow.
 #
-# Toolchain ownership:
-#   - cmake          -> provided by mise (manifold-csg-sys build script needs it)
-#   - rust nightly   -> NOT mise; rustup honors rust-toolchain.toml on first cargo run
-#   - Linux sys deps -> apt (Bevy: alsa/udev/wayland)
-#
-# We deliberately install ONLY cmake via mise (not bevy_cli/nextest, which are
-# dev-only and would compile from git on every runner) so a red build means
-# "Jackdaw doesn't build on this desktop", nothing else.
+# Separate from upstream's ci.yaml (which only runs on `main` and does an
+# ubuntu-only dynamic-linking build — no desktop matrix).
 name: mise-desktop-build
 
 on:
@@ -34,30 +30,21 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Bevy Linux system deps
+      # Free disk for the large Bevy build (upstream ci.yaml does the same).
+      - name: Free disk space (Linux)
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            libasound2-dev libudev-dev libwayland-dev
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
-      - name: Set up mise
-        uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v2
         with:
-          install: false
           cache: true
 
-      - name: Install cmake via mise
-        run: mise install cmake
-
-      - name: Cargo cache
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: desktop-build-${{ matrix.os }}
+          shared-key: mise-desktop-build-${{ matrix.os }}
 
-      # cmake comes from mise; rust nightly resolves from rust-toolchain.toml.
+      # mise run build = setup-deps (cross-platform host deps) -> cargo build.
       - name: Build
-        run: mise exec cmake -- cargo build --locked --workspace
+        run: mise run build
