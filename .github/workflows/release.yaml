@@ -1,8 +1,8 @@
 # Release (our overlay branch) — build the editor on each desktop, then let the
-# shared `cliff:release` task (joeblew999/.github) do the rest: regenerate the
+# shared `release:github` task (joeblew999/.github) do the rest: regenerate the
 # changelog, tag, push, `gh release create`, and upload + verify the assets.
 #
-# Manual trigger (cliff:release CREATES the tag, so we do NOT trigger on a tag).
+# Manual trigger (release:github CREATES the tag, so we do NOT trigger on a tag).
 # Dispatch with a fork-scheme version, e.g. v0.4.1-jb.1. Binaries only — NOT
 # crates.io (that was upstream's release.yaml, removed on this branch).
 name: release
@@ -16,7 +16,7 @@ on:
         type: string
 
 permissions:
-  contents: write   # cliff:release pushes the changelog commit/tag + creates the release
+  contents: write   # release:github pushes the changelog commit/tag + creates the release
 
 concurrency:
   group: release-${{ github.ref }}
@@ -55,14 +55,14 @@ jobs:
           path: target/dist/*.tar.gz
           if-no-files-found: error
 
-  # 2. Collect the archives and run the shared cliff:release (gh + git-cliff).
+  # 2. Collect the archives and run the shared release:github (gh + git-cliff).
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}   # stay on the branch — cliff:release pushes HEAD
+          ref: ${{ github.ref_name }}   # stay on the branch — release:github pushes HEAD
           fetch-depth: 0                 # git-cliff needs full history
       - uses: jdx/mise-action@v2
         with:
@@ -73,7 +73,7 @@ jobs:
         with:
           path: target/dist
           merge-multiple: true          # flatten all matrix archives into target/dist/
-      - name: cliff:release
+      - name: release:github
         env:
           GH_TOKEN: ${{ github.token }}
-        run: mise run cliff:release -- "${{ inputs.version }}" target/dist/*.tar.gz
+        run: mise run release:github -- "${{ inputs.version }}" target/dist/*.tar.gz
