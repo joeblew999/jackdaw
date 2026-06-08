@@ -63,7 +63,8 @@ new:game         Scaffold a new game project
 test             Run all tests
 fmt / clippy     Format / lint
 ci               Full local CI (fmt + clippy + test + doc)
-release:install  Install the published release from crates.io
+dist:install     Install the published release from crates.io
+clean            Remove build artifacts (target/); clean:dist, clean:all too
 …                (plumbing like setup:deps is hidden; `mise tasks --hidden` shows it)
 ```
 

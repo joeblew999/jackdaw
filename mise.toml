@@ -1,35 +1,34 @@
 # Jackdaw Editor — development task runner
-# Usage: mise run <task>   |   mise tasks
+# Usage: mise run <task>   |   mise tasks   |   mise tasks --hidden
 #
 # ╔══════════════════════════════════════════════════════════╗
 # ║  QUICK START                                            ║
-# ║                                                         ║
-# ║  1. mise run setup     — first-time build (editor +     ║
-# ║                          SDK + rustc wrapper)            ║
-# ║  2. mise run open      — launch the editor               ║
-# ║  3. In the launcher:                                    ║
-# ║     • "+ New Extension" to scaffold an extension        ║
-# ║     • "+ New Game"      to scaffold a game              ║
-# ║     • "Open existing…"  to open a project folder        ║
-# ║                                                         ║
-# ║  NOTE: Do NOT open the editor's own repo as a project!  ║
-# ║  The editor repo is the host — extensions/games are     ║
-# ║  separate project directories with crate-type=cdylib.   ║
+# ║   1. mise run setup    — first-time build (deps + editor)║
+# ║   2. mise run open     — launch the editor               ║
 # ╚══════════════════════════════════════════════════════════╝
 #
-# NAMING: tasks are colon-namespaced (build:dylib, open:project, test:doc, …)
-# so `mise tasks` groups them. Base verbs (build/run/open/test/fmt/doc) are the
-# common case; the colon variants are specializations.
+# NAMING — colon-namespaced (build:dylib, open:project, dist:install, clean:all)
+# so `mise tasks` groups them. Base verbs (build/run/open/test/fmt/doc/clean)
+# are the common case; colon variants are specializations. Matches the
+# convention in joeblew999/.github (mise:sweep, cliff:release, ci:check-global).
 #
-# CROSS-PLATFORM: tasks with logic (vars, file ops, conditionals) are written
-# in nushell (`#!/usr/bin/env nu`) so they run identically on Linux/macOS/
-# Windows. Plain single-command tasks (`cargo …`) stay as-is. Avoid sh-isms
-# (cat/find/cp/rm/$VAR/&&//tmp) — use nushell built-ins instead.
+# CROSS-PLATFORM — tasks with logic are nushell (`#!/usr/bin/env nu`) so they run
+# identically on Linux/macOS/Windows. Single-command `cargo …` tasks stay as-is.
+# No sh-isms (cat/find/cp/rm/$VAR/&&//tmp) — use nushell built-ins.
 #
-# SELF-CONTAINED BUILD: `mise run build` depends on `setup:deps`, which installs
-# the host system deps mise can't (Bevy alsa/udev/wayland + a C/C++ toolchain),
-# dispatched per OS. So `mise run build` works from scratch on any desktop —
-# which is exactly what .github/workflows/mise-desktop-build.yaml relies on.
+# SELF-CONTAINED BUILD — `mise run build` depends on `setup:deps`, which installs
+# the host deps mise can't (Bevy alsa/udev/wayland + a C/C++ toolchain), per OS.
+# So it builds from a clean checkout on any desktop — what the CI relies on.
+#
+# WHERE OUTPUTS GO                                        → HOW TO CLEAN
+#   target/             cargo build/run/test (gitignored;   mise run clean
+#                       reaches tens of GB)
+#   ~/.cargo/bin/jackdaw  dist:install (crates.io build)     mise run clean:dist
+#   .cargo/config.toml  build:fast:on overwrites this        mise run build:fast:off
+#                       committed file (Windows linker fix)   (restores it via git)
+#   <location>/<name>   new:extension / new:game (you pick    delete it yourself
+#                       the dir) — not under this repo
+#   ── mise run clean:all = clean + clean:dist + restore .cargo/config.toml ──
 
 # ─── Tools ──────────────────────────────────────────────
 
@@ -38,26 +37,19 @@
 "cargo:cargo-nextest" = "latest"
 watchexec = "latest"
 # Required to build manifold-csg-sys (Jackdaw's Manifold CSG kernel), whose
-# build script invokes cmake. Without this `cargo build` fails at
-# manifold-csg-sys with "No version is set for shim: cmake".
+# build script invokes cmake. Without it `cargo build` fails at manifold-csg-sys
+# with "No version is set for shim: cmake".
 cmake = "latest"
-# NOTE: Jackdaw needs the nightly pinned in rust-toolchain.toml
-# (#![feature(try_trait_v2)]). We do NOT set RUSTUP_TOOLCHAIN here — rustup
-# honors rust-toolchain.toml on its own now that the global mise config no
-# longer manages `rust`. See joeblew999/.github `ci:check-global`.
-# nushell (the task shell for logic tasks) is a ubiquitous GLOBAL mise tool,
-# not pinned here — see joeblew999/.github mise SSOT policy.
+# NOTE: the nightly is pinned in rust-toolchain.toml (#![feature(try_trait_v2)]).
+# We do NOT set RUSTUP_TOOLCHAIN / manage `rust` via mise — that would override
+# rust-toolchain.toml. rustup honors the file on its own. nushell (the task shell)
+# is a ubiquitous GLOBAL mise tool, not pinned here.
 
 # ─── setup: ─────────────────────────────────────────────
 
-# Install host build prerequisites that mise can't manage. mise gives us cmake
-# and (via rustup) the Rust toolchain; this covers the rest:
-#   - Linux:   Bevy default-feature dev libs (alsa/udev/wayland) + a C/C++
-#              toolchain + pkg-config (for manifold-csg-sys, built by cmake)
-#   - macOS:   Xcode Command Line Tools (clang) — cmake comes from mise
-#   - Windows: MSVC Build Tools (C++ for manifold-csg-sys + -sys crates)
-# OS-dispatching + idempotent: skips fast (no sudo) when already satisfied, so
-# it's cheap to depend on from the build tasks.
+# Install host build prerequisites mise can't manage (Bevy alsa/udev/wayland +
+# C/C++ toolchain; cmake comes from mise). OS-dispatching + idempotent (fast,
+# no-sudo skip when satisfied), so the build tasks can depend on it cheaply.
 [tasks."setup:deps"]
 description = "Install host build prerequisites (Bevy sys deps + C/C++ toolchain). OS-dispatching; idempotent."
 hide = true   # plumbing: runs automatically as a build dependency
@@ -133,7 +125,7 @@ def windows-deps [] {
 
 [tasks.setup]
 description = "First-time setup: build editor + SDK dylib + rustc wrapper"
-depends = ["build:dylib", "build:rustc-wrapper"]
+depends = ["build:dylib", "build:wrapper"]
 run = '''
 #!/usr/bin/env nu
 print ""
@@ -143,41 +135,43 @@ print "Setup complete! Run 'mise run open' to launch the editor."
 # ─── build: ─────────────────────────────────────────────
 
 [tasks.build]
-description = "Build the editor (without dylib/extension support)"
+description = "Build the editor (debug)"
 depends = ["setup:deps"]
 run = "cargo build"
+
+[tasks."build:release"]
+description = "Build the editor (release, no dev extensions)"
+depends = ["setup:deps"]
+run = "cargo build --release --no-default-features"
 
 [tasks."build:dylib"]
 description = "Build the editor with dylib/extension-loading support"
 depends = ["setup:deps"]
 run = "cargo build --features dylib"
 
-[tasks."build:rustc-wrapper"]
+[tasks."build:wrapper"]
 description = "Build the rustc wrapper"
 hide = true   # plumbing: internal, only built as part of `setup`
 depends = ["setup:deps"]
 run = "cargo build -p jackdaw_rustc_wrapper"
 
-[tasks."build:release"]
-description = "Build in release mode (no dev extensions)"
-depends = ["setup:deps"]
-run = "cargo build --release --no-default-features"
-
-[tasks."build:fast-enable"]
-description = "Enable fast-build cargo config (Mold/LLD speed-ups)"
+[tasks."build:fast:on"]
+description = "Use the fast-build cargo config (LLD/Mold). Overwrites .cargo/config.toml"
 run = '''
 #!/usr/bin/env nu
 cp .cargo/config_fast_builds.toml .cargo/config.toml
-print "Fast builds enabled (.cargo/config.toml created)."
-print "Run 'mise run build:fast-disable' to revert."
+print "Fast-build cargo config active (.cargo/config.toml overwritten)."
+print "Run 'mise run build:fast:off' to restore the committed config."
 '''
 
-[tasks."build:fast-disable"]
-description = "Remove custom cargo config (back to defaults)"
+[tasks."build:fast:off"]
+description = "Restore the committed .cargo/config.toml (revert fast-build)"
 run = '''
 #!/usr/bin/env nu
-if (".cargo/config.toml" | path exists) { rm .cargo/config.toml }
-print "Reverted to default cargo config."
+# .cargo/config.toml is committed (carries the Windows rust-lld fix), so revert
+# via git rather than deleting it.
+^git checkout -- .cargo/config.toml
+print "Restored committed .cargo/config.toml."
 '''
 
 # ─── run: / open: ───────────────────────────────────────
@@ -186,7 +180,7 @@ print "Reverted to default cargo config."
 description = "Launch the editor (quick, no extension loading)"
 run = "cargo run"
 
-[tasks."run:clean"]
+[tasks."run:bare"]
 description = "Launch without the built-in example extensions"
 run = "cargo run --no-default-features"
 
@@ -219,19 +213,19 @@ description = "Open the viewable_camera_extension example"
 depends = ["setup"]
 run = 'cargo run --features dylib -- "{{config_root}}/examples/viewable_camera_extension"'
 
-# ─── release: (the published editor from crates.io) ─────
+# ─── dist: (the published editor from crates.io) ────────
 # NOTE: upstream publishes NO prebuilt binaries (every GitHub release has zero
 # assets), so the only "release" channel is crates.io — which compiles from
-# source. These give the clean published release (no local patches), installed
-# to ~/.cargo/bin, separate from the dev tree.
+# source. Installs to ~/.cargo/bin, separate from this dev tree. Named `dist:`
+# (not `release:`) to avoid colliding with `build:release` (release-mode build).
 
-[tasks."release:install"]
-description = "Install the latest published Jackdaw release from crates.io (compiles; needs nightly + cmake)"
+[tasks."dist:install"]
+description = "Install the published Jackdaw from crates.io (compiles; needs nightly + cmake)"
 run = "cargo install jackdaw --locked"
 
-[tasks."release:run"]
-description = "Install (if needed) and launch the latest published Jackdaw release"
-depends = ["release:install"]
+[tasks."dist:run"]
+description = "Install (if needed) and launch the published Jackdaw"
+depends = ["dist:install"]
 run = "jackdaw"
 
 # ─── new: (scaffolding) ─────────────────────────────────
@@ -332,7 +326,7 @@ run = "cargo doc --workspace --document-private-items --no-deps"
 description = "Generate and open API docs in browser"
 run = "cargo doc --workspace --document-private-items --no-deps --open"
 
-# ─── ci / clean ─────────────────────────────────────────
+# ─── ci ─────────────────────────────────────────────────
 
 [tasks.ci]
 description = "Run the full CI pipeline locally (format + clippy + test + doc)"
@@ -343,6 +337,26 @@ print ""
 print "All CI checks passed!"
 '''
 
+# ─── clean: ─────────────────────────────────────────────
+
 [tasks.clean]
-description = "Clean all build artifacts"
+description = "Remove cargo build artifacts (target/ — can be tens of GB)"
 run = "cargo clean"
+
+[tasks."clean:dist"]
+description = "Uninstall the crates.io-installed jackdaw (~/.cargo/bin)"
+run = '''
+#!/usr/bin/env nu
+let r = (do { ^cargo uninstall jackdaw } | complete)
+if $r.exit_code == 0 { print "✓ uninstalled jackdaw from ~/.cargo/bin" } else { print "nothing to uninstall (jackdaw not installed via cargo)" }
+'''
+
+[tasks."clean:all"]
+description = "Clean everything: target/, the crates.io binary, and restore the cargo config"
+depends = ["clean", "clean:dist"]
+run = '''
+#!/usr/bin/env nu
+^git checkout -- .cargo/config.toml
+print "✓ restored committed .cargo/config.toml"
+print "✓ clean:all done (target/, crates.io binary, cargo config)"
+'''
