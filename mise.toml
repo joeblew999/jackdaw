@@ -39,11 +39,12 @@ experimental = true   # required by the shared task lib
 
 [task_config]
 includes = [
-  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.35.1",
+  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.36.1",
   # cliff:release — git-cliff changelog + tag + push + `gh release create` +
   # asset upload (verified). The release workflow runs this with the per-OS
   # archives built by release:stage.
-  "git::https://github.com/joeblew999/.github.git//tasks/cliff.toml?ref=v0.35.1",
+  "git::https://github.com/joeblew999/.github.git//tasks/cliff.toml?ref=v0.36.1",
+  "git::https://github.com/joeblew999/.github.git//tasks/release.toml?ref=v0.36.1",
 ]
 
 # ─── Tools ──────────────────────────────────────────────
@@ -160,25 +161,26 @@ depends = ["setup:deps"]
 run = "cargo build --release --no-default-features"
 
 [tasks."release:stage"]
-description = "Build release + package a GitHub-release archive (jackdaw_<ver>_<os>_<arch>.{tar.gz,zip})"
+description = "Build release + lay out the per-OS dir, then archive via shared release:pack (.github)"
 depends = ["setup:deps"]
 run = '''
 #!/usr/bin/env nu
-# Version from the git tag in CI ($RELEASE_VERSION = github.ref_name), else the
-# Cargo.toml version prefixed with v. Archive name is goreleaser-style.
+# Build jackdaw (release), lay out target/dist/jackdaw_<ver>_<os>_<arch>/ with the
+# binaries + licenses, then hand off to the shared fleet packer (release:pack),
+# which tar.gz's each staging subdir. Version from the git tag in CI
+# ($RELEASE_VERSION = github.ref_name), else the Cargo.toml version, v-prefixed.
 def main [] {
   let version = ($env.RELEASE_VERSION? | default $"v(open Cargo.toml | get package.version)")
   let osname = (match $nu.os-info.name { "macos" => "darwin", "windows" => "windows", _ => "linux" })
   let arch = (match $nu.os-info.arch { "x86_64" => "amd64", "aarch64" => "arm64", $a => $a })
-  let win = ($nu.os-info.name == "windows")
-  let binext = (if $win { ".exe" } else { "" })
+  let binext = (if $nu.os-info.name == "windows" { ".exe" } else { "" })
 
   print $"→ building jackdaw ($version) for ($osname)/($arch)"
   ^cargo build --release --no-default-features
 
+  rm -rf target/dist
   let name = $"jackdaw_($version)_($osname)_($arch)"
   let stage = $"target/dist/($name)"
-  rm -rf $stage
   mkdir $stage
   for b in ["jackdaw" "jackdaw-rustc-wrapper"] {
     let p = $"target/release/($b)($binext)"
@@ -187,14 +189,8 @@ def main [] {
   for f in ["README.md" "LICENSE-MIT" "LICENSE-APACHE"] {
     if ($f | path exists) { cp $f $stage }
   }
-  cd target/dist
-  if $win {
-    ^tar -a -c -f $"($name).zip" $name          # bsdtar: -a = compress by extension (zip)
-    print $"✓ target/dist/($name).zip"
-  } else {
-    ^tar -czf $"($name).tar.gz" $name
-    print $"✓ target/dist/($name).tar.gz"
-  }
+  # archive via the shared fleet packer (joeblew999/.github release:pack)
+  ^mise run release:pack -- --dir target/dist
 }
 '''
 

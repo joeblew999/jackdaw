@@ -52,9 +52,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: jackdaw-${{ matrix.os }}
-          path: |
-            target/dist/*.tar.gz
-            target/dist/*.zip
+          path: target/dist/*.tar.gz
           if-no-files-found: error
 
   # 2. Collect the archives and run the shared cliff:release (gh + git-cliff).
@@ -78,4 +76,4 @@ jobs:
       - name: cliff:release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: mise run cliff:release -- "${{ inputs.version }}" target/dist/*.tar.gz target/dist/*.zip
+        run: mise run cliff:release -- "${{ inputs.version }}" target/dist/*.tar.gz
