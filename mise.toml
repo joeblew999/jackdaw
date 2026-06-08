@@ -45,12 +45,11 @@ includes = [
 # ─── Tools ──────────────────────────────────────────────
 
 [tools]
-"cargo:https://github.com/TheBevyFlock/bevy_cli" = { version = "tag:cli-v0.1.0-alpha.2", crate = "bevy_cli", bin = "bevy", locked = true }
-"cargo:cargo-nextest" = "latest"
-watchexec = "latest"
-# Required to build manifold-csg-sys (Jackdaw's Manifold CSG kernel), whose
-# build script invokes cmake. Without it `cargo build` fails at manifold-csg-sys
-# with "No version is set for shim: cmake".
+# Only cmake is needed to BUILD (manifold-csg-sys's build script invokes it).
+# Dev-only `cargo:` tools (bevy_cli, cargo-nextest) are pinned PER-TASK, NOT here,
+# so CI's `mise install` doesn't compile them via the cargo: backend — which
+# fails on Windows against the pinned nightly (rustup cargo-component conflict:
+# "cargo.exe not applicable to nightly-… toolchain").
 cmake = "latest"
 # NOTE: the nightly is pinned in rust-toolchain.toml (#![feature(try_trait_v2)]).
 # We do NOT set RUSTUP_TOOLCHAIN / manage `rust` via mise — that would override
@@ -264,6 +263,7 @@ run-external (open Cargo.toml | get package.name)
 
 [tasks."new:extension"]
 description = "Scaffold a new extension"
+tools = { "cargo:https://github.com/TheBevyFlock/bevy_cli" = { version = "tag:cli-v0.1.0-alpha.2", crate = "bevy_cli", bin = "bevy", locked = true } }
 usage = 'arg "<name>" arg "[location]"'
 run = '''
 #!/usr/bin/env nu
@@ -277,6 +277,7 @@ print $"Edit ($loc | path join $env.usage_name 'src' 'lib.rs'), then build from 
 
 [tasks."new:game"]
 description = "Scaffold a new game project"
+tools = { "cargo:https://github.com/TheBevyFlock/bevy_cli" = { version = "tag:cli-v0.1.0-alpha.2", crate = "bevy_cli", bin = "bevy", locked = true } }
 usage = 'arg "<name>" arg "[location]"'
 run = '''
 #!/usr/bin/env nu
@@ -330,6 +331,7 @@ run = "cargo test --workspace"
 
 [tasks."test:nextest"]
 description = "Run tests with nextest"
+tools = { "cargo:cargo-nextest" = "latest" }   # per-task: not installed in CI build
 run = "cargo nextest run --workspace --lib --bins --tests --no-fail-fast --no-tests warn"
 
 [tasks."test:doc"]
