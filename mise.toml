@@ -60,6 +60,7 @@ cmake = "latest"
 # it's cheap to depend on from the build tasks.
 [tasks."setup:deps"]
 description = "Install host build prerequisites (Bevy sys deps + C/C++ toolchain). OS-dispatching; idempotent."
+hide = true   # plumbing: runs automatically as a build dependency
 run = '''
 #!/usr/bin/env nu
 def main [] {
@@ -153,6 +154,7 @@ run = "cargo build --features dylib"
 
 [tasks."build:rustc-wrapper"]
 description = "Build the rustc wrapper"
+hide = true   # plumbing: internal, only built as part of `setup`
 depends = ["setup:deps"]
 run = "cargo build -p jackdaw_rustc_wrapper"
 

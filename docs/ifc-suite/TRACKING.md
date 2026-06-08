@@ -30,6 +30,7 @@ Live status board. Update the date when you touch it. Last updated: **2026-06-08
 | PR | Scope | Status |
 |---|---|---|
 | cmake build prerequisite doc | Add "requires `cmake`" to CONTRIBUTING/book build section (universal — GitHub CI has it, local devs hit it). Provider-agnostic, blind-PR-able. | candidate, not filed |
+| mise dev+CI proposal | Optional mise tooling: one-command cross-platform local build + matching CI. Draft at `docs/upstream/issue-mise-local-ci.md`. Issue/RFC first per CONTRIBUTING (not a blind PR — maintainer doesn't use mise). | drafted, not filed |
 
 Note: the two earlier core patches (`MenuAction` reflectable, `bevy_cli` doc tag pin) were
 **dropped** on 2026-06-08 — verified unneeded (MenuAction is an observer event, no reflection
