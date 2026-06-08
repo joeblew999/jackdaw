@@ -14,6 +14,7 @@ Live status board. Update the date when you touch it. Last updated: **2026-06-08
 | 5 | Scaffold `jackdaw_ifc` extension | ☐ todo | import operator + IFC inspector panel (reads baked `source`/`GlobalId`) |
 | 6 | Scaffold `jackdaw_host` binary | ☐ todo | `EditorPlugin + JackdawIfc`; later `bevy_pmetra` |
 | 7 | Onboard Jackdaw as `ifc-ubuntu` module #10 | ☐ todo | overlay `repos/jackdaw/` + `tasks/jackdaw/` referencing this fork |
+| 8 | Builds on vm-uncloud (self-hosted) | ☐ future — tracked in [vm-uncloud#5](https://github.com/joeblew999/vm-uncloud/issues/5) | **Motivation: GitHub CI is slow + disk-starved** (~14 GB vs Jackdaw's ~43 GB Bevy `target/`). Plan (per the issue): **vulture (Vultr)** runs persistent **Windows/Linux/Mac** desktops snapshotted to **CF R2**; a GitHub workflow git-clones and **"mise takes over"** via the shared `.github` mise CI. Persistent checkout + rust cache (no docker inside the desktop) → **~1 h → ~5 min**. jackdaw is already shaped for this: `mise.yaml` uses `reusable-mise-ci.yml` + `[task_config].includes`, and `mise run build` is runner-agnostic — so onboarding = register the desktops as self-hosted runners and add their labels to the `os-matrix`. Zero porting. |
 
 ## Upstream issues we watch (jbuehler23/jackdaw)
 
