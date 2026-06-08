@@ -1,0 +1,63 @@
+# Desktop build (our overlay branch only).
+#
+# Builds Jackdaw on each desktop OS using mise for tooling. This is OUR
+# workflow (joeblew999 branch) — separate from upstream's ci.yaml.
+#
+# Toolchain ownership:
+#   - cmake          -> provided by mise (manifold-csg-sys build script needs it)
+#   - rust nightly   -> NOT mise; rustup honors rust-toolchain.toml on first cargo run
+#   - Linux sys deps -> apt (Bevy: alsa/udev/wayland)
+#
+# We deliberately install ONLY cmake via mise (not bevy_cli/nextest, which are
+# dev-only and would compile from git on every runner) so a red build means
+# "Jackdaw doesn't build on this desktop", nothing else.
+name: desktop-build
+
+on:
+  push:
+    branches: [joeblew999]
+  pull_request:
+    branches: [joeblew999]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Bevy Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libasound2-dev libudev-dev libwayland-dev
+
+      - name: Set up mise
+        uses: jdx/mise-action@v2
+        with:
+          install: false
+          cache: true
+
+      - name: Install cmake via mise
+        run: mise install cmake
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: desktop-build-${{ matrix.os }}
+
+      # cmake comes from mise; rust nightly resolves from rust-toolchain.toml.
+      - name: Build
+        run: mise exec cmake -- cargo build --locked --workspace
