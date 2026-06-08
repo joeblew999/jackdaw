@@ -70,6 +70,10 @@ clean            Remove build artifacts (target/); clean:dist, clean:all too
 
 ## CI: the same command, three desktops
 
+Standalone, dependency-free workflow (one matrix job, `mise run build`). In our
+own fleet we run the equivalent via a shared reusable workflow across repos, but
+the version below has no external dependency — drop-in for upstream.
+
 ```yaml
 name: mise-desktop-build
 on: { push: { branches: [main] }, pull_request: { branches: [main] }, workflow_dispatch: {} }

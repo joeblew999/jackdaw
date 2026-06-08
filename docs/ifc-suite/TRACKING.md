@@ -9,7 +9,7 @@ Live status board. Update the date when you touch it. Last updated: **2026-06-08
 | 1 | Update fork to upstream, clean dirty merge | ✅ done | `main` = upstream `2a8ee17` (v0.4.1); fast-forward, 0 divergence |
 | 2 | Fix build toolchain (cmake + nightly) | ✅ done | `cmake` in mise `[tools]`; nightly via `rust-toolchain.toml` (rustup-owned) |
 | 3 | Reduce fork to zero core patches | ✅ done | `joeblew999` = upstream + `mise.toml` + these docs only |
-| 3b | Per-desktop CI build (mise) | ✅ done | `.github/workflows/mise-desktop-build.yaml` — `mise run build` on ubuntu/macos/windows; setup:deps handles host deps, nightly via rust-toolchain.toml |
+| 3b | Per-desktop CI build (mise) | ✅ done | `.github/workflows/mise.yaml` calls the shared `joeblew999/.github` **reusable-mise-ci.yml@v0.35.1** (fleet convention) → `mise run build` on ubuntu/macos/windows. setup:deps handles host deps; nightly via rust-toolchain.toml. mise.toml `[task_config].includes` pulls the shared mise:* tasks. |
 | 4 | Prove glTF import seam end-to-end | ☐ todo | Load an `ifc-ubuntu` `.glb` (cadrum STEP + IFC) into running Jackdaw |
 | 5 | Scaffold `jackdaw_ifc` extension | ☐ todo | import operator + IFC inspector panel (reads baked `source`/`GlobalId`) |
 | 6 | Scaffold `jackdaw_host` binary | ☐ todo | `EditorPlugin + JackdawIfc`; later `bevy_pmetra` |

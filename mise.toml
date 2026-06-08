@@ -30,6 +30,18 @@
 #                       the dir) — not under this repo
 #   ── mise run clean:all = clean + clean:dist + restore .cargo/config.toml ──
 
+# ─── Shared task library (joeblew999/.github) ───────────
+# Pulls mise:* tasks (incl. mise:global, which the reusable CI workflow runs)
+# and ci:check-global. Bump this ?ref= together with the workflow @ref in
+# .github/workflows/mise.yaml. CI = joeblew999/.github reusable-mise-ci.yml.
+[settings]
+experimental = true   # required by the shared task lib
+
+[task_config]
+includes = [
+  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.35.1",
+]
+
 # ─── Tools ──────────────────────────────────────────────
 
 [tools]
@@ -213,20 +225,40 @@ description = "Open the viewable_camera_extension example"
 depends = ["setup"]
 run = 'cargo run --features dylib -- "{{config_root}}/examples/viewable_camera_extension"'
 
-# ─── dist: (the published editor from crates.io) ────────
-# NOTE: upstream publishes NO prebuilt binaries (every GitHub release has zero
-# assets), so the only "release" channel is crates.io — which compiles from
-# source. Installs to ~/.cargo/bin, separate from this dev tree. Named `dist:`
-# (not `release:`) to avoid colliding with `build:release` (release-mode build).
+# ─── dist: (install/run the editor from THIS repo's origin) ──
+# FORK-AWARE so the mise is reusable in any fork unchanged: installs from the
+# `origin` remote (latest vX.Y.Z release tag, else default branch), with the
+# binary name read from Cargo.toml — no hardcoded crate name or upstream URL.
+# Forks publish no prebuilt binaries / aren't on crates.io, so we build from git.
+# Installs to ~/.cargo/bin; `dist:` (not `release:`) avoids colliding with
+# build:release (release-mode build).
 
 [tasks."dist:install"]
-description = "Install the published Jackdaw from crates.io (compiles; needs nightly + cmake)"
-run = "cargo install jackdaw --locked"
+description = "Install the editor from this repo's origin (latest release tag; fork-aware)"
+run = '''
+#!/usr/bin/env nu
+let origin = (do { ^git remote get-url origin } | complete)
+if $origin.exit_code != 0 { print -e "✗ no `origin` remote — run inside a git clone"; exit 1 }
+let url = ($origin.stdout | str trim)
+let pkg = (open Cargo.toml | get package.name)
+let tags = (^git ls-remote --tags --refs $url "v*" | lines | parse --regex 'refs/tags/(?<t>v.+)$' | get t)
+if ($tags | is-empty) {
+  print $"→ installing ($pkg) from ($url) default branch (no release tag)"
+  ^cargo install --git $url --locked $pkg
+} else {
+  let latest = ($tags | sort --natural | last)
+  print $"→ installing ($pkg) ($latest) from ($url)"
+  ^cargo install --git $url --tag $latest --locked $pkg
+}
+'''
 
 [tasks."dist:run"]
-description = "Install (if needed) and launch the published Jackdaw"
+description = "Install (if needed) and launch the editor (fork-aware binary name)"
 depends = ["dist:install"]
-run = "jackdaw"
+run = '''
+#!/usr/bin/env nu
+run-external (open Cargo.toml | get package.name)
+'''
 
 # ─── new: (scaffolding) ─────────────────────────────────
 

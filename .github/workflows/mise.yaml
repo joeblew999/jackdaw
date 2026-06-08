@@ -1,0 +1,27 @@
+name: mise CI
+
+# joeblew999-branch CI — builds Jackdaw on each desktop via the SHARED reusable
+# workflow at joeblew999/.github (the fleet convention: one workflow runs one
+# mise task across the OS matrix; the task's `depends` graph fans out the work).
+# Here the task is `build`, which depends on `setup:deps` (cross-platform host
+# deps) — so `mise run build` compiles from a clean checkout on every desktop.
+#
+# Does NOT touch upstream's ci.yaml / release.yaml / book.yaml (those fire on
+# `main` only). Bump the @ref together with the ?ref= pins in mise.toml's
+# [task_config].includes.
+
+on:
+  push:
+    branches: [joeblew999]
+  pull_request:
+    branches: [joeblew999]
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: joeblew999/.github/.github/workflows/reusable-mise-ci.yml@v0.35.1
+    with:
+      task: build
+      os-matrix: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+      sccache: true
+      cargo-lock-path: Cargo.lock
