@@ -39,12 +39,12 @@ experimental = true   # required by the shared task lib
 
 [task_config]
 includes = [
-  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.36.1",
+  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.36.2",
   # cliff:release — git-cliff changelog + tag + push + `gh release create` +
   # asset upload (verified). The release workflow runs this with the per-OS
   # archives built by release:stage.
-  "git::https://github.com/joeblew999/.github.git//tasks/cliff.toml?ref=v0.36.1",
-  "git::https://github.com/joeblew999/.github.git//tasks/release.toml?ref=v0.36.1",
+  "git::https://github.com/joeblew999/.github.git//tasks/cliff.toml?ref=v0.36.2",
+  "git::https://github.com/joeblew999/.github.git//tasks/release.toml?ref=v0.36.2",
 ]
 
 # ─── Tools ──────────────────────────────────────────────
