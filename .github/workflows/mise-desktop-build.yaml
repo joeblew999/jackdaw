@@ -11,7 +11,7 @@
 # We deliberately install ONLY cmake via mise (not bevy_cli/nextest, which are
 # dev-only and would compile from git on every runner) so a red build means
 # "Jackdaw doesn't build on this desktop", nothing else.
-name: desktop-build
+name: mise-desktop-build
 
 on:
   push:

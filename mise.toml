@@ -16,6 +16,11 @@
 # ║  The editor repo is the host — extensions/games are     ║
 # ║  separate project directories with crate-type=cdylib.   ║
 # ╚══════════════════════════════════════════════════════════╝
+#
+# CROSS-PLATFORM: tasks with logic (vars, file ops, conditionals) are written
+# in nushell (`#!/usr/bin/env nu`) so they run identically on Linux/macOS/
+# Windows. Plain single-command tasks (`cargo …`) stay as-is. Avoid sh-isms
+# (cat/find/cp/rm/$VAR/&&//tmp) — use nushell built-ins instead.
 
 # ─── Tools ──────────────────────────────────────────────
 
@@ -31,6 +36,8 @@ cmake = "latest"
 # (#![feature(try_trait_v2)]). We do NOT set RUSTUP_TOOLCHAIN here — rustup
 # honors rust-toolchain.toml on its own now that the global mise config no
 # longer manages `rust`. See joeblew999/.github `ci:check-global`.
+# nushell (the task shell for logic tasks) is a ubiquitous GLOBAL mise tool,
+# not pinned here — see joeblew999/.github mise SSOT policy.
 
 # ─── Setup & Build ──────────────────────────────────────
 
@@ -118,8 +125,9 @@ def windows-deps [] {
 description = "First-time setup: build editor + SDK dylib + rustc wrapper"
 depends = ["build-dylib", "build-rustc-wrapper"]
 run = '''
-echo ""
-echo "Setup complete! Run 'mise run open' to launch the editor."
+#!/usr/bin/env nu
+print ""
+print "Setup complete! Run 'mise run open' to launch the editor."
 '''
 
 [tasks.build]
@@ -153,7 +161,10 @@ run = "cargo run --features dylib"
 description = "Open a project directory directly"
 depends = ["setup"]
 usage = 'arg "<path>"'
-run = 'cargo run --features dylib -- "$usage_path"'
+run = '''
+#!/usr/bin/env nu
+^cargo run --features dylib -- $env.usage_path
+'''
 
 [tasks.open-example]
 description = "Open the example scene (brush + lighting)"
@@ -197,22 +208,28 @@ run = "jackdaw"
 
 [tasks.new-extension]
 description = "Scaffold a new extension"
-usage = 'arg "<name>" arg "[location]" default="/tmp"'
+usage = 'arg "<name>" arg "[location]"'
 run = '''
-cd "${usage_location:-/tmp}" && bevy new -t https://github.com/jbuehler23/jackdaw_template_extension --yes "$usage_name"
-echo ""
-echo "Extension created at ${usage_location:-/tmp}/$usage_name"
-echo "Edit ${usage_location:-/tmp}/$usage_name/src/lib.rs, then build from the editor."
+#!/usr/bin/env nu
+let loc = ($env.usage_location? | default ($env.TMPDIR? | default ($env.TEMP? | default ($env.TMP? | default "/tmp"))))
+cd $loc
+^bevy new -t https://github.com/jbuehler23/jackdaw_template_extension --yes $env.usage_name
+print ""
+print $"Extension created at ($loc | path join $env.usage_name)"
+print $"Edit ($loc | path join $env.usage_name 'src' 'lib.rs'), then build from the editor."
 '''
 
 [tasks.new-game]
 description = "Scaffold a new game project"
-usage = 'arg "<name>" arg "[location]" default="/tmp"'
+usage = 'arg "<name>" arg "[location]"'
 run = '''
-cd "${usage_location:-/tmp}" && bevy new -t https://github.com/jbuehler23/jackdaw_template_game --yes "$usage_name"
-echo ""
-echo "Game created at ${usage_location:-/tmp}/$usage_name"
-echo "Open it from the editor launcher."
+#!/usr/bin/env nu
+let loc = ($env.usage_location? | default ($env.TMPDIR? | default ($env.TEMP? | default ($env.TMP? | default "/tmp"))))
+cd $loc
+^bevy new -t https://github.com/jbuehler23/jackdaw_template_game --yes $env.usage_name
+print ""
+print $"Game created at ($loc | path join $env.usage_name)"
+print "Open it from the editor launcher."
 '''
 
 # ─── Project Info ───────────────────────────────────────
@@ -220,23 +237,34 @@ echo "Open it from the editor launcher."
 [tasks.project-info]
 description = "Show project info for this repo"
 run = '''
-echo "Project config:"
-cat .jsn/project.jsn 2>/dev/null || cat project.jsn 2>/dev/null || echo "  No project.jsn found"
-echo ""
-echo "Scenes:"
-find assets -name '*.jsn' ! -name 'project.jsn' 2>/dev/null || echo "  No scenes found"
-echo ""
-echo "Project metadata (.jsn/):"
-ls .jsn/ 2>/dev/null || echo "  No .jsn/ directory"
+#!/usr/bin/env nu
+print "Project config:"
+let cfg = (["./.jsn/project.jsn" "./project.jsn"] | where {|p| ($p | path exists)})
+if ($cfg | is-not-empty) { open --raw ($cfg | first) | print } else { print "  No project.jsn found" }
+print ""
+print "Scenes:"
+let scenes = (glob "assets/**/*.jsn" | where {|p| ($p | path basename) != "project.jsn"})
+if ($scenes | is-empty) { print "  No scenes found" } else { for s in $scenes { print $"  ($s)" } }
+print ""
+print "Project metadata (.jsn/):"
+if (".jsn" | path exists) { for n in (ls .jsn | get name) { print $"  ($n)" } } else { print "  No .jsn/ directory" }
 '''
 
 [tasks.scenes]
 description = "List all scenes"
-run = 'find assets examples/assets -name "*.jsn" ! -name "project.jsn" 2>/dev/null || echo "No scenes found"'
+run = '''
+#!/usr/bin/env nu
+let scenes = ((glob "assets/**/*.jsn") ++ (glob "examples/assets/**/*.jsn") | where {|p| ($p | path basename) != "project.jsn"})
+if ($scenes | is-empty) { print "No scenes found" } else { for s in $scenes { print $s } }
+'''
 
 [tasks.recent]
 description = "List recent projects opened in the editor"
-run = 'cat ~/.config/jackdaw/recent.json 2>/dev/null || echo "No recent projects yet."'
+run = '''
+#!/usr/bin/env nu
+let f = ($nu.home-dir | path join ".config" "jackdaw" "recent.json")
+if ($f | path exists) { open --raw $f | print } else { print "No recent projects yet." }
+'''
 
 # ─── Test ───────────────────────────────────────────────
 
@@ -282,8 +310,9 @@ run = "cargo doc --workspace --document-private-items --no-deps --open"
 description = "Run the full CI pipeline locally (format + clippy + test + doc)"
 depends = ["fmt-check", "clippy", "test", "doc"]
 run = '''
-echo ""
-echo "All CI checks passed!"
+#!/usr/bin/env nu
+print ""
+print "All CI checks passed!"
 '''
 
 # ─── Fast Builds ───────────────────────────────────────
@@ -291,16 +320,18 @@ echo "All CI checks passed!"
 [tasks.enable-fast-builds]
 description = "Enable fast-build cargo config"
 run = '''
+#!/usr/bin/env nu
 cp .cargo/config_fast_builds.toml .cargo/config.toml
-echo "Fast builds enabled (.cargo/config.toml created)."
-echo "Run 'mise run disable-fast-builds' to revert."
+print "Fast builds enabled (.cargo/config.toml created)."
+print "Run 'mise run disable-fast-builds' to revert."
 '''
 
 [tasks.disable-fast-builds]
 description = "Remove custom cargo config (back to defaults)"
 run = '''
-rm -f .cargo/config.toml
-echo "Reverted to default cargo config."
+#!/usr/bin/env nu
+if (".cargo/config.toml" | path exists) { rm .cargo/config.toml }
+print "Reverted to default cargo config."
 '''
 
 # ─── Clean ──────────────────────────────────────────────
