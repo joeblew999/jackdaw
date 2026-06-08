@@ -46,7 +46,7 @@ jobs:
         with:
           shared-key: release-${{ matrix.os }}
       - name: Build + package
-        run: mise run release:archive
+        run: mise run release:stage
         env:
           RELEASE_VERSION: ${{ inputs.version }}
       - uses: actions/upload-artifact@v4
