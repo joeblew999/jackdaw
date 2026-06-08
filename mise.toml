@@ -17,15 +17,19 @@
 # ║  separate project directories with crate-type=cdylib.   ║
 # ╚══════════════════════════════════════════════════════════╝
 #
+# NAMING: tasks are colon-namespaced (build:dylib, open:project, test:doc, …)
+# so `mise tasks` groups them. Base verbs (build/run/open/test/fmt/doc) are the
+# common case; the colon variants are specializations.
+#
 # CROSS-PLATFORM: tasks with logic (vars, file ops, conditionals) are written
 # in nushell (`#!/usr/bin/env nu`) so they run identically on Linux/macOS/
 # Windows. Plain single-command tasks (`cargo …`) stay as-is. Avoid sh-isms
 # (cat/find/cp/rm/$VAR/&&//tmp) — use nushell built-ins instead.
 #
-# SELF-CONTAINED BUILD: `mise run build` depends on `setup-deps`, which installs
+# SELF-CONTAINED BUILD: `mise run build` depends on `setup:deps`, which installs
 # the host system deps mise can't (Bevy alsa/udev/wayland + a C/C++ toolchain),
 # dispatched per OS. So `mise run build` works from scratch on any desktop —
-# which is exactly what the .github/workflows/mise-desktop-build.yaml CI relies on.
+# which is exactly what .github/workflows/mise-desktop-build.yaml relies on.
 
 # ─── Tools ──────────────────────────────────────────────
 
@@ -44,7 +48,7 @@ cmake = "latest"
 # nushell (the task shell for logic tasks) is a ubiquitous GLOBAL mise tool,
 # not pinned here — see joeblew999/.github mise SSOT policy.
 
-# ─── Setup & Build ──────────────────────────────────────
+# ─── setup: ─────────────────────────────────────────────
 
 # Install host build prerequisites that mise can't manage. mise gives us cmake
 # and (via rustup) the Rust toolchain; this covers the rest:
@@ -54,7 +58,7 @@ cmake = "latest"
 #   - Windows: MSVC Build Tools (C++ for manifold-csg-sys + -sys crates)
 # OS-dispatching + idempotent: skips fast (no sudo) when already satisfied, so
 # it's cheap to depend on from the build tasks.
-[tasks.setup-deps]
+[tasks."setup:deps"]
 description = "Install host build prerequisites (Bevy sys deps + C/C++ toolchain). OS-dispatching; idempotent."
 run = '''
 #!/usr/bin/env nu
@@ -104,7 +108,7 @@ def macos-deps [] {
   } else {
     print "→ installing Xcode Command Line Tools (a GUI dialog may appear)…"
     ^xcode-select --install
-    print -e "  complete the dialog, then re-run `mise run setup-deps`"
+    print -e "  complete the dialog, then re-run `mise run setup:deps`"
     exit 1
   }
 }
@@ -128,41 +132,68 @@ def windows-deps [] {
 
 [tasks.setup]
 description = "First-time setup: build editor + SDK dylib + rustc wrapper"
-depends = ["build-dylib", "build-rustc-wrapper"]
+depends = ["build:dylib", "build:rustc-wrapper"]
 run = '''
 #!/usr/bin/env nu
 print ""
 print "Setup complete! Run 'mise run open' to launch the editor."
 '''
 
+# ─── build: ─────────────────────────────────────────────
+
 [tasks.build]
 description = "Build the editor (without dylib/extension support)"
-depends = ["setup-deps"]
+depends = ["setup:deps"]
 run = "cargo build"
 
-[tasks.build-dylib]
+[tasks."build:dylib"]
 description = "Build the editor with dylib/extension-loading support"
-depends = ["setup-deps"]
+depends = ["setup:deps"]
 run = "cargo build --features dylib"
 
-[tasks.build-rustc-wrapper]
+[tasks."build:rustc-wrapper"]
 description = "Build the rustc wrapper"
-depends = ["setup-deps"]
+depends = ["setup:deps"]
 run = "cargo build -p jackdaw_rustc_wrapper"
 
-[tasks.build-release]
+[tasks."build:release"]
 description = "Build in release mode (no dev extensions)"
-depends = ["setup-deps"]
+depends = ["setup:deps"]
 run = "cargo build --release --no-default-features"
 
-# ─── Run ────────────────────────────────────────────────
+[tasks."build:fast-enable"]
+description = "Enable fast-build cargo config (Mold/LLD speed-ups)"
+run = '''
+#!/usr/bin/env nu
+cp .cargo/config_fast_builds.toml .cargo/config.toml
+print "Fast builds enabled (.cargo/config.toml created)."
+print "Run 'mise run build:fast-disable' to revert."
+'''
+
+[tasks."build:fast-disable"]
+description = "Remove custom cargo config (back to defaults)"
+run = '''
+#!/usr/bin/env nu
+if (".cargo/config.toml" | path exists) { rm .cargo/config.toml }
+print "Reverted to default cargo config."
+'''
+
+# ─── run: / open: ───────────────────────────────────────
+
+[tasks.run]
+description = "Launch the editor (quick, no extension loading)"
+run = "cargo run"
+
+[tasks."run:clean"]
+description = "Launch without the built-in example extensions"
+run = "cargo run --no-default-features"
 
 [tasks.open]
 description = "Launch the editor with full extension support"
 depends = ["setup"]
 run = "cargo run --features dylib"
 
-[tasks.open-project]
+[tasks."open:project"]
 description = "Open a project directory directly"
 depends = ["setup"]
 usage = 'arg "<path>"'
@@ -171,47 +202,39 @@ run = '''
 ^cargo run --features dylib -- $env.usage_path
 '''
 
-[tasks.open-example]
+[tasks."open:example"]
 description = "Open the example scene (brush + lighting)"
 depends = ["setup"]
 run = 'cargo run --features dylib -- "{{config_root}}"'
 
-[tasks.open-sample-extension]
+[tasks."open:sample-extension"]
 description = "Open the sample_extension example"
 depends = ["setup"]
 run = 'cargo run --features dylib -- "{{config_root}}/examples/sample_extension"'
 
-[tasks.open-viewable-camera]
+[tasks."open:viewable-camera"]
 description = "Open the viewable_camera_extension example"
 depends = ["setup"]
 run = 'cargo run --features dylib -- "{{config_root}}/examples/viewable_camera_extension"'
 
-[tasks.run]
-description = "Launch the editor (quick, no extension loading)"
-run = "cargo run"
+# ─── release: (the published editor from crates.io) ─────
+# NOTE: upstream publishes NO prebuilt binaries (every GitHub release has zero
+# assets), so the only "release" channel is crates.io — which compiles from
+# source. These give the clean published release (no local patches), installed
+# to ~/.cargo/bin, separate from the dev tree.
 
-[tasks.run-clean]
-description = "Launch without the built-in example extensions"
-run = "cargo run --no-default-features"
-
-# ─── Released editor (from crates.io) ───────────────────
-# NOTE: upstream publishes NO prebuilt binaries (every GitHub release has
-# zero assets), so the only "release" channel is crates.io — which compiles
-# from source. These tasks give you the clean published release (no local
-# patches), installed to ~/.cargo/bin, separate from the dev tree.
-
-[tasks.install-release]
+[tasks."release:install"]
 description = "Install the latest published Jackdaw release from crates.io (compiles; needs nightly + cmake)"
 run = "cargo install jackdaw --locked"
 
-[tasks.run-release]
+[tasks."release:run"]
 description = "Install (if needed) and launch the latest published Jackdaw release"
-depends = ["install-release"]
+depends = ["release:install"]
 run = "jackdaw"
 
-# ─── Extensions & Games ────────────────────────────────
+# ─── new: (scaffolding) ─────────────────────────────────
 
-[tasks.new-extension]
+[tasks."new:extension"]
 description = "Scaffold a new extension"
 usage = 'arg "<name>" arg "[location]"'
 run = '''
@@ -224,7 +247,7 @@ print $"Extension created at ($loc | path join $env.usage_name)"
 print $"Edit ($loc | path join $env.usage_name 'src' 'lib.rs'), then build from the editor."
 '''
 
-[tasks.new-game]
+[tasks."new:game"]
 description = "Scaffold a new game project"
 usage = 'arg "<name>" arg "[location]"'
 run = '''
@@ -237,9 +260,9 @@ print $"Game created at ($loc | path join $env.usage_name)"
 print "Open it from the editor launcher."
 '''
 
-# ─── Project Info ───────────────────────────────────────
+# ─── info: ──────────────────────────────────────────────
 
-[tasks.project-info]
+[tasks.info]
 description = "Show project info for this repo"
 run = '''
 #!/usr/bin/env nu
@@ -255,7 +278,7 @@ print "Project metadata (.jsn/):"
 if (".jsn" | path exists) { for n in (ls .jsn | get name) { print $"  ($n)" } } else { print "  No .jsn/ directory" }
 '''
 
-[tasks.scenes]
+[tasks."info:scenes"]
 description = "List all scenes"
 run = '''
 #!/usr/bin/env nu
@@ -263,7 +286,7 @@ let scenes = ((glob "assets/**/*.jsn") ++ (glob "examples/assets/**/*.jsn") | wh
 if ($scenes | is-empty) { print "No scenes found" } else { for s in $scenes { print $s } }
 '''
 
-[tasks.recent]
+[tasks."info:recent"]
 description = "List recent projects opened in the editor"
 run = '''
 #!/usr/bin/env nu
@@ -271,75 +294,52 @@ let f = ($nu.home-dir | path join ".config" "jackdaw" "recent.json")
 if ($f | path exists) { open --raw $f | print } else { print "No recent projects yet." }
 '''
 
-# ─── Test ───────────────────────────────────────────────
+# ─── test: ──────────────────────────────────────────────
 
 [tasks.test]
 description = "Run all tests"
 run = "cargo test --workspace"
 
-[tasks.test-nextest]
+[tasks."test:nextest"]
 description = "Run tests with nextest"
 run = "cargo nextest run --workspace --lib --bins --tests --no-fail-fast --no-tests warn"
 
-[tasks.test-doc]
+[tasks."test:doc"]
 description = "Run doc tests only"
 run = "cargo test --workspace --doc"
 
-# ─── Lint & Format ──────────────────────────────────────
-
-[tasks.clippy]
-description = "Run clippy on the entire workspace"
-run = "cargo clippy --workspace --all-targets -- --deny warnings"
-
-[tasks.fmt-check]
-description = "Check formatting (no changes)"
-run = "cargo fmt --all -- --check"
+# ─── fmt: / clippy / doc: ───────────────────────────────
 
 [tasks.fmt]
 description = "Apply formatting"
 run = "cargo fmt --all"
 
-# ─── Docs ───────────────────────────────────────────────
+[tasks."fmt:check"]
+description = "Check formatting (no changes)"
+run = "cargo fmt --all -- --check"
+
+[tasks.clippy]
+description = "Run clippy on the entire workspace"
+run = "cargo clippy --workspace --all-targets -- --deny warnings"
 
 [tasks.doc]
 description = "Generate API docs"
 run = "cargo doc --workspace --document-private-items --no-deps"
 
-[tasks.doc-open]
+[tasks."doc:open"]
 description = "Generate and open API docs in browser"
 run = "cargo doc --workspace --document-private-items --no-deps --open"
 
-# ─── CI ─────────────────────────────────────────────────
+# ─── ci / clean ─────────────────────────────────────────
 
 [tasks.ci]
 description = "Run the full CI pipeline locally (format + clippy + test + doc)"
-depends = ["fmt-check", "clippy", "test", "doc"]
+depends = ["fmt:check", "clippy", "test", "doc"]
 run = '''
 #!/usr/bin/env nu
 print ""
 print "All CI checks passed!"
 '''
-
-# ─── Fast Builds ───────────────────────────────────────
-
-[tasks.enable-fast-builds]
-description = "Enable fast-build cargo config"
-run = '''
-#!/usr/bin/env nu
-cp .cargo/config_fast_builds.toml .cargo/config.toml
-print "Fast builds enabled (.cargo/config.toml created)."
-print "Run 'mise run disable-fast-builds' to revert."
-'''
-
-[tasks.disable-fast-builds]
-description = "Remove custom cargo config (back to defaults)"
-run = '''
-#!/usr/bin/env nu
-if (".cargo/config.toml" | path exists) { rm .cargo/config.toml }
-print "Reverted to default cargo config."
-'''
-
-# ─── Clean ──────────────────────────────────────────────
 
 [tasks.clean]
 description = "Clean all build artifacts"
