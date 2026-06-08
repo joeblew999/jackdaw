@@ -10,7 +10,7 @@
 # NAMING — colon-namespaced (build:dylib, open:project, dist:install, clean:all)
 # so `mise tasks` groups them. Base verbs (build/run/open/test/fmt/doc/clean)
 # are the common case; colon variants are specializations. Matches the
-# convention in joeblew999/.github (mise:sweep, cliff:release, ci:check-global).
+# convention in joeblew999/.github (mise:sweep, release:github, ci:check-global).
 #
 # CROSS-PLATFORM — tasks with logic are nushell (`#!/usr/bin/env nu`) so they run
 # identically on Linux/macOS/Windows. Single-command `cargo …` tasks stay as-is.
