@@ -1,0 +1,226 @@
+# Jackdaw Editor — development task runner
+# Usage: mise run <task>   |   mise tasks
+#
+# ╔══════════════════════════════════════════════════════════╗
+# ║  QUICK START                                            ║
+# ║                                                         ║
+# ║  1. mise run setup     — first-time build (editor +     ║
+# ║                          SDK + rustc wrapper)            ║
+# ║  2. mise run open      — launch the editor               ║
+# ║  3. In the launcher:                                    ║
+# ║     • "+ New Extension" to scaffold an extension        ║
+# ║     • "+ New Game"      to scaffold a game              ║
+# ║     • "Open existing…"  to open a project folder        ║
+# ║                                                         ║
+# ║  NOTE: Do NOT open the editor's own repo as a project!  ║
+# ║  The editor repo is the host — extensions/games are     ║
+# ║  separate project directories with crate-type=cdylib.   ║
+# ╚══════════════════════════════════════════════════════════╝
+
+# ─── Tools ──────────────────────────────────────────────
+
+[tools]
+"cargo:https://github.com/TheBevyFlock/bevy_cli" = { version = "tag:cli-v0.1.0-alpha.2", crate = "bevy_cli", bin = "bevy", locked = true }
+"cargo:cargo-nextest" = "latest"
+watchexec = "latest"
+# Required to build manifold-csg-sys (Jackdaw's Manifold CSG kernel), whose
+# build script invokes cmake. Without this `cargo build` fails at
+# manifold-csg-sys with "No version is set for shim: cmake".
+cmake = "latest"
+# NOTE: Jackdaw needs the nightly pinned in rust-toolchain.toml
+# (#![feature(try_trait_v2)]). We do NOT set RUSTUP_TOOLCHAIN here — rustup
+# honors rust-toolchain.toml on its own now that the global mise config no
+# longer manages `rust`. See joeblew999/.github `ci:check-global`.
+
+# ─── Setup & Build ──────────────────────────────────────
+
+[tasks.setup]
+description = "First-time setup: build editor + SDK dylib + rustc wrapper"
+depends = ["build-dylib", "build-rustc-wrapper"]
+run = '''
+echo ""
+echo "Setup complete! Run 'mise run open' to launch the editor."
+'''
+
+[tasks.build]
+description = "Build the editor (without dylib/extension support)"
+run = "cargo build"
+
+[tasks.build-dylib]
+description = "Build the editor with dylib/extension-loading support"
+run = "cargo build --features dylib"
+
+[tasks.build-rustc-wrapper]
+description = "Build the rustc wrapper"
+run = "cargo build -p jackdaw_rustc_wrapper"
+
+[tasks.build-release]
+description = "Build in release mode (no dev extensions)"
+run = "cargo build --release --no-default-features"
+
+# ─── Run ────────────────────────────────────────────────
+
+[tasks.open]
+description = "Launch the editor with full extension support"
+depends = ["setup"]
+run = "cargo run --features dylib"
+
+[tasks.open-project]
+description = "Open a project directory directly"
+depends = ["setup"]
+usage = 'arg "<path>"'
+run = 'cargo run --features dylib -- "$usage_path"'
+
+[tasks.open-example]
+description = "Open the example scene (brush + lighting)"
+depends = ["setup"]
+run = 'cargo run --features dylib -- "{{config_root}}"'
+
+[tasks.open-sample-extension]
+description = "Open the sample_extension example"
+depends = ["setup"]
+run = 'cargo run --features dylib -- "{{config_root}}/examples/sample_extension"'
+
+[tasks.open-viewable-camera]
+description = "Open the viewable_camera_extension example"
+depends = ["setup"]
+run = 'cargo run --features dylib -- "{{config_root}}/examples/viewable_camera_extension"'
+
+[tasks.run]
+description = "Launch the editor (quick, no extension loading)"
+run = "cargo run"
+
+[tasks.run-clean]
+description = "Launch without the built-in example extensions"
+run = "cargo run --no-default-features"
+
+# ─── Released editor (from crates.io) ───────────────────
+# NOTE: upstream publishes NO prebuilt binaries (every GitHub release has
+# zero assets), so the only "release" channel is crates.io — which compiles
+# from source. These tasks give you the clean published release (no local
+# patches), installed to ~/.cargo/bin, separate from the dev tree.
+
+[tasks.install-release]
+description = "Install the latest published Jackdaw release from crates.io (compiles; needs nightly + cmake)"
+run = "cargo install jackdaw --locked"
+
+[tasks.run-release]
+description = "Install (if needed) and launch the latest published Jackdaw release"
+depends = ["install-release"]
+run = "jackdaw"
+
+# ─── Extensions & Games ────────────────────────────────
+
+[tasks.new-extension]
+description = "Scaffold a new extension"
+usage = 'arg "<name>" arg "[location]" default="/tmp"'
+run = '''
+cd "${usage_location:-/tmp}" && bevy new -t https://github.com/jbuehler23/jackdaw_template_extension --yes "$usage_name"
+echo ""
+echo "Extension created at ${usage_location:-/tmp}/$usage_name"
+echo "Edit ${usage_location:-/tmp}/$usage_name/src/lib.rs, then build from the editor."
+'''
+
+[tasks.new-game]
+description = "Scaffold a new game project"
+usage = 'arg "<name>" arg "[location]" default="/tmp"'
+run = '''
+cd "${usage_location:-/tmp}" && bevy new -t https://github.com/jbuehler23/jackdaw_template_game --yes "$usage_name"
+echo ""
+echo "Game created at ${usage_location:-/tmp}/$usage_name"
+echo "Open it from the editor launcher."
+'''
+
+# ─── Project Info ───────────────────────────────────────
+
+[tasks.project-info]
+description = "Show project info for this repo"
+run = '''
+echo "Project config:"
+cat .jsn/project.jsn 2>/dev/null || cat project.jsn 2>/dev/null || echo "  No project.jsn found"
+echo ""
+echo "Scenes:"
+find assets -name '*.jsn' ! -name 'project.jsn' 2>/dev/null || echo "  No scenes found"
+echo ""
+echo "Project metadata (.jsn/):"
+ls .jsn/ 2>/dev/null || echo "  No .jsn/ directory"
+'''
+
+[tasks.scenes]
+description = "List all scenes"
+run = 'find assets examples/assets -name "*.jsn" ! -name "project.jsn" 2>/dev/null || echo "No scenes found"'
+
+[tasks.recent]
+description = "List recent projects opened in the editor"
+run = 'cat ~/.config/jackdaw/recent.json 2>/dev/null || echo "No recent projects yet."'
+
+# ─── Test ───────────────────────────────────────────────
+
+[tasks.test]
+description = "Run all tests"
+run = "cargo test --workspace"
+
+[tasks.test-nextest]
+description = "Run tests with nextest"
+run = "cargo nextest run --workspace --lib --bins --tests --no-fail-fast --no-tests warn"
+
+[tasks.test-doc]
+description = "Run doc tests only"
+run = "cargo test --workspace --doc"
+
+# ─── Lint & Format ──────────────────────────────────────
+
+[tasks.clippy]
+description = "Run clippy on the entire workspace"
+run = "cargo clippy --workspace --all-targets -- --deny warnings"
+
+[tasks.fmt-check]
+description = "Check formatting (no changes)"
+run = "cargo fmt --all -- --check"
+
+[tasks.fmt]
+description = "Apply formatting"
+run = "cargo fmt --all"
+
+# ─── Docs ───────────────────────────────────────────────
+
+[tasks.doc]
+description = "Generate API docs"
+run = "cargo doc --workspace --document-private-items --no-deps"
+
+[tasks.doc-open]
+description = "Generate and open API docs in browser"
+run = "cargo doc --workspace --document-private-items --no-deps --open"
+
+# ─── CI ─────────────────────────────────────────────────
+
+[tasks.ci]
+description = "Run the full CI pipeline locally (format + clippy + test + doc)"
+depends = ["fmt-check", "clippy", "test", "doc"]
+run = '''
+echo ""
+echo "All CI checks passed!"
+'''
+
+# ─── Fast Builds ───────────────────────────────────────
+
+[tasks.enable-fast-builds]
+description = "Enable fast-build cargo config"
+run = '''
+cp .cargo/config_fast_builds.toml .cargo/config.toml
+echo "Fast builds enabled (.cargo/config.toml created)."
+echo "Run 'mise run disable-fast-builds' to revert."
+'''
+
+[tasks.disable-fast-builds]
+description = "Remove custom cargo config (back to defaults)"
+run = '''
+rm -f .cargo/config.toml
+echo "Reverted to default cargo config."
+'''
+
+# ─── Clean ──────────────────────────────────────────────
+
+[tasks.clean]
+description = "Clean all build artifacts"
+run = "cargo clean"
