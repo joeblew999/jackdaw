@@ -19,7 +19,7 @@ on:
 
 jobs:
   build:
-    uses: joeblew999/.github/.github/workflows/reusable-mise-ci.yml@v0.35.1
+    uses: joeblew999/.github/.github/workflows/reusable-mise-ci.yml@v0.68.0
     with:
       task: build
       os-matrix: '["ubuntu-latest", "macos-latest", "windows-latest"]'
