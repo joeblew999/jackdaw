@@ -31,7 +31,7 @@
 #   ── mise run clean:all = clean + clean:dist + restore .cargo/config.toml ──
 
 # ─── Shared task library (joeblew999/.github) ───────────
-# Pulls mise:* tasks (incl. mise:global, which the reusable CI workflow runs)
+# Pulls mise:* tasks (incl. mise:global:bootstrap, which the reusable CI workflow runs)
 # and ci:check-global. Bump this ?ref= together with the workflow @ref in
 # .github/workflows/mise.yaml. CI = joeblew999/.github reusable-mise-ci.yml.
 [settings]
@@ -39,11 +39,11 @@ experimental = true   # required by the shared task lib
 
 [task_config]
 includes = [
-  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.37.0",
+  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.68.0",
   # release.toml gives release:pack (package) + release:github (changelog + tag +
   # push + gh release create + verified asset upload). The release workflow uses
   # both. (No cliff.toml include — we don't use the cliff:* query tasks here.)
-  "git::https://github.com/joeblew999/.github.git//tasks/release.toml?ref=v0.37.0",
+  "git::https://github.com/joeblew999/.github.git//tasks/release.toml?ref=v0.68.0",
 ]
 
 # ─── Tools ──────────────────────────────────────────────

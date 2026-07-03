@@ -68,7 +68,7 @@ jobs:
         with:
           install: false
           cache: true
-      - run: mise run mise:global       # seed git-cliff + gh + nu (shared toolset)
+      - run: mise run mise:global:bootstrap       # seed git-cliff + gh + nu (shared toolset)
       - uses: actions/download-artifact@v4
         with:
           path: target/dist
