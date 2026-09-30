@@ -1,3 +1,4 @@
+# Project-local tasks only. See MISE-RETIREMENT.md for retired workflows and prerequisites.
 # Jackdaw Editor — development task runner
 # Usage: mise run <task>   |   mise tasks   |   mise tasks --hidden
 #
@@ -10,7 +11,6 @@
 # NAMING — colon-namespaced (build:dylib, open:project, dist:install, clean:all)
 # so `mise tasks` groups them. Base verbs (build/run/open/test/fmt/doc/clean)
 # are the common case; colon variants are specializations. Matches the
-# convention in joeblew999/.github (mise:sweep, release:github, ci:check-global).
 #
 # CROSS-PLATFORM — tasks with logic are nushell (`#!/usr/bin/env nu`) so they run
 # identically on Linux/macOS/Windows. Single-command `cargo …` tasks stay as-is.
@@ -30,21 +30,9 @@
 #                       the dir) — not under this repo
 #   ── mise run clean:all = clean + clean:dist + restore .cargo/config.toml ──
 
-# ─── Shared task library (joeblew999/.github) ───────────
-# Pulls mise:* tasks (incl. mise:global:bootstrap, which the reusable CI workflow runs)
-# and ci:check-global. Bump this ?ref= together with the workflow @ref in
-# .github/workflows/mise.yaml. CI = joeblew999/.github reusable-mise-ci.yml.
 [settings]
 experimental = true   # required by the shared task lib
 
-[task_config]
-includes = [
-  "git::https://github.com/joeblew999/.github.git//tasks/mise.toml?ref=v0.68.0",
-  # release.toml gives release:pack (package) + release:github (changelog + tag +
-  # push + gh release create + verified asset upload). The release workflow uses
-  # both. (No cliff.toml include — we don't use the cliff:* query tasks here.)
-  "git::https://github.com/joeblew999/.github.git//tasks/release.toml?ref=v0.68.0",
-]
 
 # ─── Tools ──────────────────────────────────────────────
 
@@ -159,39 +147,6 @@ description = "Build the editor (release, no dev extensions)"
 depends = ["setup:deps"]
 run = "cargo build --release --no-default-features"
 
-[tasks."release:stage"]
-description = "Build release + lay out the per-OS dir, then archive via shared release:pack (.github)"
-depends = ["setup:deps"]
-run = '''
-#!/usr/bin/env nu
-# Build jackdaw (release), lay out target/dist/jackdaw_<ver>_<os>_<arch>/ with the
-# binaries + licenses, then hand off to the shared fleet packer (release:pack),
-# which tar.gz's each staging subdir. Version from the git tag in CI
-# ($RELEASE_VERSION = github.ref_name), else the Cargo.toml version, v-prefixed.
-def main [] {
-  let version = ($env.RELEASE_VERSION? | default $"v(open Cargo.toml | get package.version)")
-  let osname = (match $nu.os-info.name { "macos" => "darwin", "windows" => "windows", _ => "linux" })
-  let arch = (match $nu.os-info.arch { "x86_64" => "amd64", "aarch64" => "arm64", $a => $a })
-  let binext = (if $nu.os-info.name == "windows" { ".exe" } else { "" })
-
-  print $"→ building jackdaw ($version) for ($osname)/($arch)"
-  ^cargo build --release --no-default-features
-
-  rm -rf target/dist
-  let name = $"jackdaw_($version)_($osname)_($arch)"
-  let stage = $"target/dist/($name)"
-  mkdir $stage
-  for b in ["jackdaw" "jackdaw-rustc-wrapper"] {
-    let p = $"target/release/($b)($binext)"
-    if ($p | path exists) { cp $p $stage } else { print -e $"  ! missing ($p)" }
-  }
-  for f in ["README.md" "LICENSE-MIT" "LICENSE-APACHE"] {
-    if ($f | path exists) { cp $f $stage }
-  }
-  # archive via the shared fleet packer (joeblew999/.github release:pack)
-  ^mise run release:pack -- --dir target/dist
-}
-'''
 
 [tasks."build:dylib"]
 description = "Build the editor with dylib/extension-loading support"
